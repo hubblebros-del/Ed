@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nico's Nextbots - VR Web Edition</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        #game-container, #speed-overlay, #static-overlay, #damage-overlay, #custom-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        }
+        #game-container { z-index: 1; }
+        #speed-overlay { box-shadow: inset 0 0 100px rgba(255, 255, 255, 0); z-index: 4; pointer-events: none; transition: box-shadow 0.2s; }
+        #static-overlay { z-index: 6; pointer-events: none; opacity: 0; mix-blend-mode: screen; }
+        #damage-overlay { background: radial-gradient(circle, rgba(255, 110, 0, 0) 50%, rgba(255, 110, 0, 0.6) 100%); z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.1s; }
+        #custom-overlay { z-index: 7; pointer-events: none; opacity: 0; mix-blend-mode: overlay; background-repeat: repeat; transition: opacity 1s; animation: panOverlay 15s linear infinite; }
+
+        @keyframes panOverlay { from { background-position: 0 0; } to { background-position: -500px 500px; } }
+
+        .cinematic-bar { position: absolute; left: 0; width: 100%; height: 0%; background: #000; z-index: 50; transition: height 0.8s cubic-bezier(0.8, 0, 0.2, 1); }
+        #cine-top { top: 0; border-bottom: 2px solid #ff5500; }
+        #cine-bottom { bottom: 0; border-top: 2px solid #ff5500; }
+
+        .caution-tape {
+            position: absolute; left: 0; width: 100%; height: 40px; background-color: #ffd700;
+            background-image: repeating-linear-gradient(-45deg, transparent, transparent 20px, #000 20px, #000 40px);
+            border-top: 3px solid #000; border-bottom: 3px solid #000; box-sizing: border-box; display: flex;
+            align-items: center; overflow: hidden; opacity: 0; z-index: 52;
+            transition: transform 0.8s cubic-bezier(0.8, 0, 0.2, 1), opacity 0.5s; white-space: nowrap;
+        }
+        #caution-top { top: 0; transform: translateY(-100%); }
+        #caution-bottom { bottom: 0; transform: translateY(100%); }
+        .caution-scroller { display: inline-flex; white-space: nowrap; animation: scrollCaution 8s linear infinite; color: #000; font-weight: bold; font-size: 1.2rem; letter-spacing: 3px; align-items: center; }
+        .caution-scroller span { padding: 0 30px; text-shadow: 1px 1px 0px #fff; }
+        @keyframes scrollCaution { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+        #cine-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8); width: 100%; text-align: center;
+            font-size: 5rem; font-weight: 900; opacity: 0; z-index: 51; text-transform: uppercase; letter-spacing: 12px; text-shadow: 0 0 30px rgba(255, 100, 0, 0.8);
+            transition: opacity 1s, transform 3s ease-out; pointer-events: none; font-family: Impact, sans-serif;
+        }
+
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.85); color: #fff; backdrop-filter: blur(5px); }
+        .title { font-size: 4.5rem; font-weight: 900; margin-bottom: 0; letter-spacing: -2px; text-transform: uppercase; color: #fff; text-shadow: 4px 4px 0px #ff5500; text-align: center; }
+        .subtitle { font-size: 1.2rem; color: #aaa; margin-bottom: 20px; text-align: center;}
+
+        #main-menu-content { display: flex; flex-direction: column; align-items: center; position: relative; width: 100%; max-width: 700px; text-align: center;}
+        .currency-display { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; font-weight: bold; background: rgba(255, 215, 0, 0.2); border: 2px solid gold; padding: 10px 20px; border-radius: 8px; color: gold; z-index: 20; text-shadow: 1px 1px 0px #000; }
+
+        .settings-panel { background: rgba(25, 25, 25, 0.8); border: 2px solid #555; border-radius: 12px; padding: 20px; margin: 10px 0; text-align: center; width: 100%; box-sizing: border-box; max-height: 50vh; overflow-y: auto; }
+        .settings-panel::-webkit-scrollbar { width: 8px; }
+        .settings-panel::-webkit-scrollbar-track { background: #111; border-radius: 4px; }
+        .settings-panel::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .settings-panel h3 { margin-top: 15px; color: #00ccff; font-size: 1.2rem; border-bottom: 1px solid #444; padding-bottom: 5px;}
+        .settings-panel h3:first-child { margin-top: 0; }
+
+        .grid-select-box { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 15px; }
+        .grid-btn { background: #333; color: #fff; border: 2px solid #555; padding: 10px 5px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 0.85rem; }
+        .grid-btn.active { background: #ff5500; color: #fff; border-color: #ffaa00; transform: scale(1.05); }
+
+        .custom-import-row { display: flex; flex-direction: column; gap: 8px; text-align: left; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;}
+        .custom-import-row label { font-size: 0.85rem; font-weight: bold; color: #ccc; }
+        .custom-import-row input[type="text"], .custom-import-row input[type="file"], .custom-import-row input[type="number"] { font-size: 0.8rem; color: #fff; background: #222; padding: 6px; border-radius: 4px; border: 1px solid #555; width: 100%; box-sizing: border-box; font-family: inherit;}
+
+        #map-maker-box { display: none; background: rgba(255,85,0,0.1); border: 1px solid #ff5500; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;}
+        #builder-grid { display: grid; grid-template-columns: repeat(15, 1fr); gap: 2px; width: 270px; height: 270px; margin: 10px auto; background: #111; border: 2px solid #555; padding: 2px; }
+        .b-cell { background: #333; cursor: pointer; aspect-ratio: 1; transition: background 0.1s; }
+        .b-cell:hover { filter: brightness(1.5); }
+        .b-legend { font-size: 0.75rem; color: #aaa; display: flex; justify-content: center; gap: 10px; margin-top: 5px; flex-wrap: wrap; }
+        .b-leg-item { display: flex; align-items: center; gap: 5px; }
+        .b-leg-box { width: 12px; height: 12px; border-radius: 2px; }
+        .brush-toolbar { display: flex; justify-content: center; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+        .brush-btn { background: #222; border: 1px solid #555; color: #fff; font-size: 0.75rem; padding: 5px 8px; cursor: pointer; border-radius: 4px; }
+        .brush-btn.active { background: #ff5500; border-color: #ffaa00; }
+
+        #shop-menu { display: none; flex-direction: column; align-items: center; background: rgba(20, 20, 20, 0.95); padding: 30px; border: 2px solid #ff5500; border-radius: 15px; width: 700px; max-height: 85vh; overflow-y: auto; animation: slideInShop 0.4s ease-out; }
+        @keyframes slideInShop { from { transform: translateY(-50px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        .shop-section { width: 100%; margin-bottom: 20px; }
+        .shop-section h3 { border-bottom: 2px solid #555; padding-bottom: 5px; color: #ffcc00; text-transform: uppercase; font-size: 1.4rem; }
+        .shop-item { background: rgba(0,0,0,0.6); border: 1px solid #444; width: 100%; padding: 12px 15px; box-sizing: border-box; margin-bottom: 8px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .shop-item-info h4 { margin: 0 0 5px 0; color: #fff; font-size: 1.1rem; }
+        .shop-item-info p { margin: 0; font-size: 0.85rem; color: #aaa; }
+        .shop-btn { padding: 8px 15px; font-size: 1rem; border-radius: 5px; cursor: pointer; font-weight: bold; text-transform: uppercase;}
+        .shop-btn.buy { background: gold; color: #000; border: none; }
+        .shop-btn.buy-event { background: #ff5500; color: #fff; border: 2px solid #ffaa00; box-shadow: 0 0 10px rgba(255,85,0,0.5); }
+        .shop-btn.equip { background: #00ccff; color: #000; border: none; }
+        .shop-btn.equipped { background: #444; color: #fff; border: 1px solid #666; cursor: default; }
+
+        #death-screen-content { display: none; flex-direction: column; align-items: center; background: rgba(20, 0, 0, 0.9); padding: 40px; border: 2px solid #ff0000; border-radius: 15px; }
+        .stats-box { font-size: 1.5rem; color: #ddd; margin: 20px 0; text-align: center; line-height: 1.8; }
+        .stats-box span { color: #ff5555; font-weight: bold; }
+        .coins-earned { color: gold !important; font-size: 1.8rem; }
+
+        button.main-btn { padding: 15px 40px; font-size: 1.4rem; font-weight: bold; font-family: inherit; background: #fff; color: #000; border: none; border-radius: 8px; cursor: pointer; transition: all 0.1s; text-transform: uppercase; box-shadow: 0 6px 0 #ccc; margin: 10px; }
+        button.main-btn:active { transform: translateY(6px); box-shadow: 0 0 0 #ccc; }
+        button.shop-open-btn { background: #ff5500; box-shadow: 0 6px 0 #aa2200; color: #fff; }
+        button.shop-open-btn:active { box-shadow: 0 0 0 #aa2200; }
+
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 8; pointer-events: none; display: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255, 255, 255, 0.9); transform: translate(-50%, -50%); border-radius: 50%; mix-blend-mode: difference; }
+        #ingame-controls { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 8px; font-size: 0.7rem; color: #eee; border: 1px solid rgba(255,255,255,0.1); line-height: 1.5; z-index: 2; }
+        #ingame-controls span { font-weight: bold; color: #fff; }
+
+        #fake-chat { position: absolute; top: 140px; left: 15px; width: 380px; height: 280px; display: flex; flex-direction: column; justify-content: flex-end; font-size: 14px; color: #fff; font-family: 'Source Sans Pro', 'Arial', sans-serif; pointer-events: auto; overflow: hidden; background: rgba(0, 0, 0, 0.35); border-radius: 4px; padding: 10px; box-sizing: border-box; text-shadow: 1px 1px 0px rgba(0,0,0,0.9); border: 1px solid rgba(255,255,255,0.05); }
+        #chat-messages { display: flex; flex-direction: column; overflow-y: auto; flex: 1; scrollbar-width: none; }
+        #chat-messages::-webkit-scrollbar { display: none; }
+        .chat-msg { padding: 3px 0; animation: fadeOut 20s forwards; line-height: 1.3; word-wrap: break-word;}
+        .chat-name { font-weight: 700; color: #e8e8e8; }
+        .chat-system { color: #ffcc00; font-weight: bold; font-style: italic; }
+        .chat-death { color: #ff4444; font-weight: bold; }
+        .chat-event { color: #ff5500; font-weight: bold; text-transform: uppercase; text-shadow: 0 0 5px #ff5500;}
+
+        @keyframes fadeOut { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes rainbow { 0% { color: #ff0000; text-shadow: 0 0 8px #ff0000; } 20% { color: #ff7f00; text-shadow: 0 0 8px #ff7f00; } 40% { color: #ffff00; text-shadow: 0 0 8px #ffff00; } 60% { color: #00ff00; text-shadow: 0 0 8px #00ff00; } 80% { color: #00ccff; text-shadow: 0 0 8px #00ccff; } 100% { color: #ff0000; text-shadow: 0 0 8px #ff0000; } }
+        .rainbow-admin { animation: rainbow 4s linear infinite; font-weight: 900; }
+
+        #chat-input-wrapper { display: flex; margin-top: 5px; width: 100%; background: rgba(0,0,0,0.6); border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); box-sizing: border-box; pointer-events: auto; }
+        #chat-input { flex: 1; background: transparent; border: none; color: #fff; padding: 6px 8px; font-family: inherit; font-size: 13px; outline: none; }
+        #chat-send-btn { background: #ff5500; color: #fff; border: none; padding: 5px 12px; font-size: 12px; font-weight: bold; cursor: pointer; border-radius: 0 3px 3px 0; }
+
+        #top-bar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 8px 25px; border-radius: 20px; font-size: 1.3rem; font-weight: bold; color: #fff; border: 2px solid rgba(255,255,255,0.1); display: flex; gap: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .coin-hud { color: gold; text-shadow: 0 0 5px gold;}
+        #safe-zone-text { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 1.3rem; font-weight: bold; color: #00ffcc; text-shadow: 0 0 15px #00ffcc; opacity: 0; transition: opacity 0.3s; }
+
+        .bars-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 400px; text-align: center; }
+        .bar-bg { background: rgba(0,0,0,0.7); width: 100%; height: 20px; border-radius: 10px; margin-top: 5px; overflow: hidden; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        #stamina-bar { width: 100%; height: 100%; background: #00ccff; transition: width .1s linear; }
+        .exhausted { background: #ff0000 !important; }
+
+        #jumpscare { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; display: none; background-color: #000; background-size: cover; background-position: center; }
+        #multiplayer-status { position: absolute; top: 15px; right: 15px; font-size: 1rem; font-weight: bold; color: #aaa; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.1); }
+        #flashlight-indicator { position: absolute; bottom: 80px; left: 30px; font-size: 1.1rem; font-weight: bold; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 5px; border: 1px solid #555; transition: opacity 0.2s, color 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        .flashlight-off { color: #666 !important; border-color: #222 !important; text-decoration: line-through;}
+
+        #lock-mouse-btn { position: absolute; bottom: 20px; right: 20px; padding: 12px 25px; background: #ff5500; color: #fff; border: 2px solid #fff; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; pointer-events: auto; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.8); transition: transform 0.1s; }
+        #lock-mouse-btn:active { transform: scale(0.95); }
+
+        #toast-container { position: absolute; top: 80px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 30; }
+        .toast { background: rgba(255, 0, 0, 0.9); color: white; padding: 10px 20px; border-radius: 5px; font-weight: bold; font-family: sans-serif; animation: toastSlide 3s forwards; box-shadow: 0 4px 6px rgba(0,0,0,0.5); border: 1px solid #ff5555; }
+        @keyframes toastSlide { 0% { transform: translateX(100%); opacity: 0; } 10%, 90% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+
+        #interaction-prompt { position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #00ffcc; border: 2px solid #00ffcc; padding: 10px 25px; border-radius: 8px; font-weight: bold; font-size: 1.2rem; display: none; z-index: 15; text-shadow: 0 0 5px #00ffcc; box-shadow: 0 0 15px rgba(0,255,204,0.3); }
+
+        /* VR Button Styling Adjustments */
+        #VRButton { position: absolute !important; bottom: 20px !important; left: 20px !important; z-index: 1000 !important; font-size: 1.1rem !important; font-weight: bold !important; border-radius: 8px !important; border: 2px solid #00ffcc !important; background: rgba(0,0,0,0.8) !important; color: #00ffcc !important; padding: 12px 20px !important; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="static-overlay"></div><div id="custom-overlay"></div><div id="speed-overlay"></div><div id="damage-overlay"></div><div id="jumpscare"></div>
+
+    <div id="cine-top" class="cinematic-bar"></div><div id="cine-bottom" class="cinematic-bar"></div><div id="cine-text"></div>
+
+    <div id="caution-top" class="caution-tape"><div class="caution-scroller"><span>⚠️ EVENT ACTIVE ⚠️</span><span>⚠️ EVENT ACTIVE ⚠️</span></div></div>
+    <div id="caution-bottom" class="caution-tape"><div class="caution-scroller"><span>⚠️ EVENT ACTIVE ⚠️</span><span>⚠️ EVENT ACTIVE ⚠️</span></div></div>
+
+    <div id="toast-container"></div>
+
+    <div id="ui-layer">
+        <div class="currency-display">COINS: <span id="menu-coins">0</span></div>
+        <div id="main-menu-content">
+            <h1 class="title">NEXTBOTS VR</h1>
+            <p class="subtitle" id="menu-edition-tag">★ WEBXR SINGLE PLAYER EDITION ★</p>
+
+            <div class="settings-panel">
+                <h3>PROFILE, DIFFICULTY &amp; GAME MODE</h3>
+                <div class="custom-import-row" style="margin-bottom: 10px;">
+                    <label>Username: <input type="text" id="username-input" placeholder="Enter Username..." value="Guest_001" maxlength="16"></label>
+                </div>
+                <div class="grid-select-box" id="mode-select-box">
+                    <button class="grid-btn mode-btn active" data-mode="classic">Classic</button>
+                    <button class="grid-btn mode-btn" data-mode="rush">Rush (2x Coins)</button>
+                    <button class="grid-btn mode-btn" data-mode="nightmare">Nightmare</button>
+                    <button class="grid-btn mode-btn" data-mode="moon">Moon Bounce</button>
+                    <button class="grid-btn mode-btn" data-mode="lava">Floor is Lava</button>
+                    <button class="grid-btn mode-btn" data-mode="chill">Chill Mode</button>
+                </div>
+
+                <h3>NEXTBOT SPEED MODIFIER</h3>
+                <div class="grid-select-box" id="pacing-select-box">
+                    <button class="grid-btn pacing-btn" data-pacing="0.5">Chill (0.5x)</button>
+                    <button class="grid-btn pacing-btn active" data-pacing="1.0">Normal (1.0x)</button>
+                    <button class="grid-btn pacing-btn" data-pacing="1.4">Fast (1.4x)</button>
+                </div>
+
+                <h3>SELECT MAP</h3>
+                <div class="grid-select-box" id="map-select-box">
+                    <button class="grid-btn map-btn active" data-map="backrooms">The Backrooms</button>
+                    <button class="grid-btn map-btn" data-map="mall">Abandoned Mall</button>
+                    <button class="grid-btn map-btn" data-map="construct">gm_construct</button>
+                    <button class="grid-btn map-btn" data-map="poolrooms">The Poolrooms</button>
+                    <button class="grid-btn map-btn" data-map="city">City Streets</button>
+                    <button class="grid-btn map-btn" data-map="space">Lunar Base</button>
+                    <button class="grid-btn map-btn" data-map="custom">CUSTOM MAP BUILDER</button>
+                </div>
+
+                <div id="map-maker-box">
+                    <h4 style="margin-top:0; color:#fff; text-align: center;">VISUAL MAP BLUEPRINT PAINTER</h4>
+                    <div class="brush-toolbar">
+                        <button class="brush-btn active" data-paint="0">Floor (Dark)</button>
+                        <button class="brush-btn" data-paint="1">Wall (Grey)</button>
+                        <button class="brush-btn" data-paint="2">Safe Zone (Green)</button>
+                        <button class="brush-btn" data-paint="3">Parkour (Purple)</button>
+                    </div>
+                    <div id="builder-grid"></div>
+                    <div class="b-legend">
+                        <div class="b-leg-item"><div class="b-leg-box" style="background:#333;"></div>Floor</div>
+                        <div class="b-leg-item"><div class="b-leg-box" style="background:#888;"></div>Wall</div>
+                        <div class="b-leg-item"><div class="b-leg-box" style="background:#0f0;"></div>Safe Zone</div>
+                        <div class="b-leg-item"><div class="b-leg-box" style="background:#a0f;"></div>Parkour Step</div>
+                    </div>
+                </div>
+
+                <h3>CUSTOM BOT &amp; GAME AUDIO</h3>
+                <div class="custom-import-row">
+                    <label>Custom Bot Image: <input type="file" id="custom-image" accept="image/*"></label>
+                    <div style="display:flex; gap:10px;"><label>Chase Audio: <input type="file" id="custom-chase" accept="audio/*"></label><label>Global Map BGM: <input type="file" id="custom-map-bgm" accept="audio/*"></label></div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; width: 100%; gap: 10px; align-items: center; justify-content: center; margin-top: 15px;">
+                <button id="start-btn" class="main-btn" style="width: 80%;">PLAY GAME</button>
+                <button id="shop-btn" class="main-btn shop-open-btn" style="width: 80%;">EVENT SHOP</button>
+            </div>
+            <p style="color: #666; margin-top: 12px; font-size: 0.9rem;">(Single-player build — event triggers below apply locally to your own run.)</p>
+        </div>
+
+        <div id="shop-menu">
+            <h2 style="color: #ff5500; margin-top: 0; font-size: 2.5rem; text-shadow: 2px 2px 0px #000;">EVENT SHOP &amp; UPGRADES</h2>
+            <div id="shop-items-container" style="width: 100%;"></div>
+            <button id="close-shop-btn" class="main-btn" style="margin-top: 20px; font-size: 1.2rem; width: 80%;">BACK TO MENU</button>
+        </div>
+
+        <div id="death-screen-content">
+            <h1 class="title" style="color: #ff0000; text-shadow: 0 0 20px #ff0000;">WASTED</h1>
+            <p class="subtitle" style="color: #fff;">THEY CAUGHT YOU.</p>
+            <div class="stats-box">
+                TIME ALIVE: <span id="stat-time">0.0s</span><br>
+                DISTANCE RAN: <span id="stat-dist">0m</span><br>
+                COINS EARNED: <span id="stat-coins" class="coins-earned">+0</span>
+            </div>
+            <div style="display: flex; flex-direction: column; width: 100%; gap: 10px; align-items: center;">
+                <button id="respawn-btn" class="main-btn" style="width: 80%;">DEPLOY AGAIN</button>
+                <button id="menu-btn" class="main-btn" style="background: #555; color: white; box-shadow: 0 6px 0 #333; width: 80%;">MAIN MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div id="multiplayer-status">SINGLE PLAYER</div>
+        <div id="ingame-controls">
+            <span>W A S D</span> Move (Thumbstick in VR)<br>
+            <span>SHIFT</span> Sprint<br>
+            <span>C</span> Slide<br>
+            <span>SPACE</span> Jump / Bunny-hop<br>
+            <span>F</span> Flashlight<br>
+            <span>ENTER</span> Chat
+        </div>
+
+        <div id="fake-chat">
+            <div id="chat-messages"></div>
+            <div id="chat-input-wrapper">
+                <input type="text" id="chat-input" placeholder="Type message..." autocomplete="off">
+                <button id="chat-send-btn">Send</button>
+            </div>
+        </div>
+
+        <div id="crosshair"></div>
+        <div id="top-bar">
+            <span>TIME: <span id="hud-timer">0.0</span>s</span>
+            <span class="coin-hud">COINS: <span id="hud-coins">0</span></span>
+        </div>
+        <div id="safe-zone-text">SAFE ZONE</div>
+        <div id="flashlight-indicator">FLASHLIGHT [F]</div>
+        <div id="interaction-prompt">PRESS [E] TO INTERACT</div>
+
+        <button id="lock-mouse-btn">🔒 LOCK MOUSE TO PLAY</button>
+
+        <div class="bars-container">
+            <div style="color: white; font-size: 14px; font-weight: bold; margin-bottom: -2px; text-shadow: 1px 1px 2px #000;">STAMINA</div>
+            <div class="bar-bg"><div id="stamina-bar"></div></div>
+        </div>
+    </div>
+
+    <!-- Three.js via ES modules + importmap - this is the reliable, current-recommended way to
+         load Three.js and its WebXR addons. The previous approach (separate UMD <script> tags
+         pointing at an old r128 build) was fragile and is exactly what caused "VRButton is not
+         defined" - that legacy path structure is no longer reliably mirrored on public CDNs. -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+        // NOTE: This build is fully single-player/local. The original file imported the
+        // Firebase SDK for multiplayer but never actually called any of it (no real-time
+        // sync, no auth flow) - that dead import was a fragile single point of failure and
+        // has been removed entirely.
+
+        const $ = id => document.getElementById(id);
+        const $$ = s => document.querySelectorAll(s);
+
+        let myUsername = "Guest_" + Math.floor(Math.random() * 9999);
+
+        let customImageUrl = null, customChaseAudio = null, customMapBGMUrl = null;
+
+        let savedItems = localStorage.getItem('nn_unlocked');
+        let unlockedItems = ['trail_none', 'light_white'];
+        try { if (savedItems) unlockedItems = JSON.parse(savedItems); } catch (e) {}
+
+        let playerCoins = parseInt(localStorage.getItem('nn_coins')) || 0;
+        let equippedTrail = localStorage.getItem('nn_eq_trail') || 'trail_none';
+        let equippedLight = localStorage.getItem('nn_eq_light') || 'light_white';
+
+        let currentMapStyle = 'backrooms';
+        let currentMode = 'classic';
+        let nextbotSpeedMult = 1.0;
+        let MAP_SIZE = 120;
+        let CELL_SIZE = 22;
+        let mapGrid = [];
+        let safeZoneRadius = 3;
+
+        let customBuilderGrid = Array(15).fill().map(() => Array(15).fill(0));
+        let activePaintBrush = 0;
+        let isPaintingMouseDown = false;
+
+        // THREE.JS / WEBXR GLOBALS
+        let scene, camera, renderer, ambientLight, cameraRig;
+        let controller1, controller2;
+        const gorillaControllers = []; // per-controller {gripped, lastPos} for arm-swing locomotion
+        let gorillaMomentum = null; // set to a THREE.Vector3 once THREE is available
+        let lastTime = performance.now();
+        let isPlaying = false;
+        let timeSurvived = 0, distanceTraveled = 0, coinsEarnedThisRun = 0;
+
+        let audioCtx, humGain, lowPassFilter;
+        let chaseAudioElement = null, mapBgmAudioElement = null;
+
+        let bots = [];
+        let trailParticles = [];
+        let mapMeshes = [];
+        let particleGeo = null; // created after THREE is confirmed loaded
+        const keys = { w: false, a: false, s: false, d: false, shift: false, space: false, c: false, f: false };
+        let flashlightLight;
+        let trailSpawnTimer = 0;
+
+        const player = {
+            height: 7.5, radius: 2.2,
+            speedWalk: 45, speedSprint: 90, speedSlide: 140,
+            jumpForce: 60, gravity: 170,
+            velocityY: 0, pitch: 0, yaw: 0,
+            stamina: 200, staminaMax: 200, staminaDrain: 40, staminaRecover: 60,
+            isSprinting: false, isGrounded: true, isSliding: false, exhausted: false,
+            slideTimer: 0, slideDuration: 0.6, slideCooldown: 0,
+            bhopWindow: 0, bhopMultiplier: 1.0,
+            isDead: false, isLocked: false
+        };
+
+        const shopData = {
+            events: [
+                { id: 'event_bloodmoon', name: 'Blood Moon Event', desc: 'Turns sky red, boosts bot speed.', price: 500 },
+                { id: 'event_blackout', name: 'Blackout Event', desc: 'Kills the lights. Flashlight only.', price: 800 },
+                { id: 'event_munci', name: 'Spawn Munci', desc: 'Unleashes an extreme hyper-fast bot.', price: 1000 },
+                { id: 'event_richard', name: 'Spawn Richard', desc: 'Spawns the classic stickman bot.', price: 1000 },
+                { id: 'event_chaos', name: 'TOTAL CHAOS', desc: 'Triggers every event at once!', price: 2000 },
+                { id: 'event_fredbear', name: 'Spawn Fredbear', desc: 'Super rare, extremely fast boss bot.', price: 10000 }
+            ],
+            trails: [
+                { id: 'trail_none', name: 'No Trail', color: 0x000000, price: 0 }, { id: 'trail_red', name: 'Blood Trail (+5% Spd)', color: 0xff0000, price: 500 },
+                { id: 'trail_blue', name: 'Neon Blur (+8% Spd)', color: 0x0088ff, price: 500 }, { id: 'trail_green', name: 'Toxic Sludge (+10% Spd)', color: 0x00ff00, price: 1000 },
+                { id: 'trail_gold', name: 'Golden Swag (+15% Spd)', color: 0xffcc00, price: 2500 }
+            ],
+            lights: [
+                { id: 'light_white', name: 'Default Flashlight', color: 0xffffff, price: 0 }, { id: 'light_red', name: 'Red Omen Light (2x Dist)', color: 0xff2222, price: 800 },
+                { id: 'light_purple', name: 'UV Purple Light (2x Dist)', color: 0x8800ff, price: 1200 }
+            ]
+        };
+
+        const trailSpeedBonus = { trail_none: 1, trail_red: 1.05, trail_blue: 1.08, trail_green: 1.10, trail_gold: 1.15 };
+
+        const mapConfig = {
+            'backrooms': { sky: 0x050402, ambient: 0x777777 },
+            'mall':      { sky: 0xdddddd, ambient: 0xffffff },
+            'construct': { sky: 0x87CEEB, ambient: 0xffffff },
+            'poolrooms': { sky: 0x112228, ambient: 0xaae0ee },
+            'city':      { sky: 0x000011, ambient: 0x444466 },
+            'space':     { sky: 0x000000, ambient: 0x333333 },
+            'custom':    { sky: 0x050505, ambient: 0xdddddd }
+        };
+
+        function showToast(msg) {
+            const container = $('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function switchUI(state) {
+            $('main-menu-content').style.display = 'none';
+            $('shop-menu').style.display = 'none';
+            $('death-screen-content').style.display = 'none';
+            $('ui-layer').style.display = 'flex';
+            $('hud').style.display = 'none';
+
+            if (state === 'menu') {
+                $('main-menu-content').style.display = 'flex';
+            } else if (state === 'shop') {
+                $('shop-menu').style.display = 'flex';
+            } else if (state === 'death') {
+                $('death-screen-content').style.display = 'flex';
+            } else if (state === 'game') {
+                $('ui-layer').style.display = 'none';
+                $('hud').style.display = 'block';
+            }
+        }
+
+        function playCutsceneLocal(title, sub, color, dur) {
+            player.isLocked = true;
+            $('cine-top').style.height = '18%'; $('cine-bottom').style.height = '18%';
+            $('caution-top').style.opacity = '1'; $('caution-top').style.transform = 'translateY(18vh)';
+            $('caution-bottom').style.opacity = '1'; $('caution-bottom').style.transform = 'translateY(-18vh)';
+            $('cine-text').innerHTML = `<span style="color:${color}">${title}</span><br><span style="font-size:2rem;color:#fff">${sub}</span>`;
+            $('cine-text').style.opacity = 1; $('cine-text').style.transform = 'translate(-50%, -50%) scale(1.0)';
+            if (audioCtx) {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sawtooth'; o.frequency.setValueAtTime(45, audioCtx.currentTime);
+                o.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 3.0);
+                g.gain.setValueAtTime(0.5, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 3.0);
+                o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 3.0);
+            }
+            setTimeout(() => {
+                $('cine-top').style.height = '0'; $('cine-bottom').style.height = '0';
+                $('caution-top').style.opacity = '0'; $('caution-top').style.transform = 'translateY(0)';
+                $('caution-bottom').style.opacity = '0'; $('caution-bottom').style.transform = 'translateY(0)';
+                $('cine-text').style.opacity = 0; $('cine-text').style.transform = 'translate(-50%, -50%) scale(0.8)';
+                player.isLocked = false;
+            }, dur);
+        }
+
+        function updateCoinDisplay() {
+            $('menu-coins').innerText = playerCoins;
+            $('hud-coins').innerText = playerCoins;
+            localStorage.setItem('nn_coins', playerCoins);
+        }
+
+        function applyCosmetics() {
+            if (flashlightLight) {
+                const l = shopData.lights.find(x => x.id === equippedLight);
+                if (l) { flashlightLight.color.setHex(l.color); flashlightLight.distance = equippedLight !== 'light_white' ? 500 : 250; }
+            }
+        }
+
+        function renderShop() {
+            const cont = $('shop-items-container');
+            cont.innerHTML = '<div class="shop-section"><h3>Local Events</h3><div id="shop-events"></div></div><div class="shop-section"><h3>Cosmetic Trails</h3><div id="shop-trails"></div></div><div class="shop-section"><h3>Flashlights</h3><div id="shop-lights"></div></div>';
+            shopData.events.forEach(ev => $('shop-events').innerHTML += `<div class="shop-item"><div class="shop-item-info"><h4>${ev.name}</h4><p>${ev.desc}</p></div><button class="shop-btn buy-event" data-id="${ev.id}" data-price="${ev.price}">TRIGGER - ${ev.price}C</button></div>`);
+            const rC = (items, divId, eqId, type) => items.forEach(item => {
+                const un = unlockedItems.includes(item.id);
+                const eq = eqId === item.id;
+                let btn = eq ? `<button class="shop-btn equipped">EQUIPPED</button>` : un ? `<button class="shop-btn equip" data-id="${item.id}" data-type="${type}">EQUIP</button>` : `<button class="shop-btn buy" data-id="${item.id}" data-price="${item.price}" data-type="${type}">BUY - ${item.price}C</button>`;
+                $(divId).innerHTML += `<div class="shop-item"><div class="shop-item-info"><h4>${item.name}</h4><p>${un ? 'Unlocked' : 'Cosmetic'}</p></div>${btn}</div>`;
+            });
+            rC(shopData.trails, 'shop-trails', equippedTrail, 'trail');
+            rC(shopData.lights, 'shop-lights', equippedLight, 'light');
+            $$('.shop-btn.buy').forEach(b => b.onclick = e => {
+                const id = e.target.getAttribute('data-id'), p = parseInt(e.target.getAttribute('data-price'));
+                if (playerCoins >= p) { playerCoins -= p; unlockedItems.push(id); localStorage.setItem('nn_unlocked', JSON.stringify(unlockedItems)); updateCoinDisplay(); renderShop(); }
+                else showToast("Not enough coins!");
+            });
+            $$('.shop-btn.buy-event').forEach(b => b.onclick = e => {
+                const id = e.target.getAttribute('data-id'), p = parseInt(e.target.getAttribute('data-price'));
+                if (playerCoins >= p) { playerCoins -= p; updateCoinDisplay(); triggerLocalEvent(id, myUsername); showToast("Event Triggered!"); }
+                else showToast("Not enough coins!");
+            });
+            $$('.shop-btn.equip').forEach(b => b.onclick = e => {
+                const id = e.target.getAttribute('data-id'), t = e.target.getAttribute('data-type');
+                if (t === 'trail') equippedTrail = id; if (t === 'light') equippedLight = id;
+                localStorage.setItem('nn_eq_trail', equippedTrail); localStorage.setItem('nn_eq_light', equippedLight);
+                renderShop(); applyCosmetics();
+            });
+        }
+
+        function spawnTrailParticle() {
+            if (equippedTrail === 'trail_none' || !scene) return;
+            const tData = shopData.trails.find(t => t.id === equippedTrail);
+            if (!tData) return;
+            let mat = new THREE.MeshBasicMaterial({ color: tData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+            let mesh = new THREE.Mesh(particleGeo, mat);
+            mesh.position.copy(cameraRig.position);
+            mesh.position.y -= player.height - 0.2;
+            mesh.rotation.x = -Math.PI / 2;
+            scene.add(mesh);
+            trailParticles.push({ mesh: mesh, life: 1.0 });
+        }
+
+        function updateTrailParticles(delta) {
+            for (let i = trailParticles.length - 1; i >= 0; i--) {
+                const p = trailParticles[i];
+                p.life -= delta * 1.2;
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.material.dispose();
+                    trailParticles.splice(i, 1);
+                } else {
+                    p.mesh.material.opacity = p.life * 0.8;
+                }
+            }
+        }
+
+        function initAudio() {
+            if (audioCtx) return;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AC();
+            humGain = audioCtx.createGain(); humGain.gain.value = 0;
+            lowPassFilter = audioCtx.createBiquadFilter(); lowPassFilter.type = 'lowpass'; lowPassFilter.frequency.value = 400;
+
+            if (customChaseAudio) {
+                chaseAudioElement = new Audio(customChaseAudio);
+                chaseAudioElement.loop = true;
+                audioCtx.createMediaElementSource(chaseAudioElement).connect(humGain).connect(lowPassFilter).connect(audioCtx.destination);
+                chaseAudioElement.play().catch(() => {});
+            } else {
+                let ho = audioCtx.createOscillator(); ho.type = 'square'; ho.frequency.value = 80;
+                const lfo = audioCtx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 25;
+                const lg = audioCtx.createGain(); lg.gain.value = 150;
+                lfo.connect(lg); lg.connect(ho.frequency);
+                let dn = audioCtx.createWaveShaper();
+                let n = 44100, c = new Float32Array(n), d = Math.PI / 180;
+                for (let i = 0; i < n; ++i) { let x = i * 2 / n - 1; c[i] = (53) * x * 20 * d / (Math.PI + 50 * Math.abs(x)); }
+                dn.curve = c;
+                ho.connect(humGain); humGain.connect(dn); dn.connect(lowPassFilter); lowPassFilter.connect(audioCtx.destination);
+                ho.start(); lfo.start();
+            }
+
+            if (customMapBGMUrl) {
+                mapBgmAudioElement = new Audio(customMapBGMUrl);
+                mapBgmAudioElement.loop = true;
+                mapBgmAudioElement.volume = 0.35;
+                mapBgmAudioElement.play().catch(() => {});
+            }
+        }
+
+        function playFootstep() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = 'triangle'; o.frequency.setValueAtTime(120, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + .1);
+            g.gain.setValueAtTime(.3, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.01, audioCtx.currentTime + .1);
+            o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + .1);
+        }
+
+        function playSyntheticJumpscare() {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = 'square'; o.frequency.setValueAtTime(150, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 1);
+            g.gain.setValueAtTime(1.2, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.01, audioCtx.currentTime + 1);
+            o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 1);
+        }
+
+        function addChat(n, m, t = 'normal') {
+            const cb = $('chat-messages');
+            const el = document.createElement('div'); el.className = 'chat-msg';
+            if (n === myUsername) el.innerHTML = `<span class="rainbow-admin">${n}:</span> ${m}`;
+            else if (t === 'system') el.innerHTML = `<span class="chat-system">[System]: ${m}</span>`;
+            else if (t === 'death') el.innerHTML = `<span class="chat-death">[RIP] ${n}:</span> ${m}`;
+            else if (t === 'event') el.innerHTML = `<span class="chat-event">[EVENT]: ${m}</span>`;
+            else el.innerHTML = `<span class="chat-name">${n}:</span> ${m}`;
+            cb.appendChild(el); cb.scrollTop = cb.scrollHeight;
+            if (cb.children.length > 50) cb.removeChild(cb.firstChild);
+        }
+
+        function setupChat() {
+            const ci = $('chat-input'), cb = $('chat-send-btn');
+            const send = () => { const msg = ci.value.trim(); if (msg) { addChat(myUsername, msg); ci.value = ""; ci.blur(); } };
+            cb.onclick = send;
+            ci.onkeydown = e => { if (e.key === 'Enter') send(); };
+        }
+
+        function create3DRichard(sc) {
+            const g = new THREE.Group(); g.name = "richard_stickman";
+            const mM = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+            const eM = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 12, 8), mM); torso.position.y = 8; g.add(torso);
+            const hG = new THREE.Group(); hG.name = "head"; hG.position.y = 15;
+            hG.add(new THREE.Mesh(new THREE.SphereGeometry(2.5, 10, 10), mM));
+            const hat = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 4, 12), new THREE.MeshLambertMaterial({ color: 0x222222 })); hat.position.y = 3.5; hG.add(hat);
+            const eL = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), eM); eL.position.set(-0.8, 0.5, 2.0);
+            const eR = eL.clone(); eR.position.x = 0.8; hG.add(eL, eR);
+            g.add(hG);
+            g.scale.set(sc / 14, sc / 14, sc / 14);
+            return g;
+        }
+
+        function createBotTex(type) {
+            const cvs = document.createElement('canvas'); cvs.width = 512; cvs.height = 512;
+            const x = cvs.getContext('2d');
+            x.fillStyle = '#fff'; x.fillRect(0, 0, 512, 512);
+            const colors = { munci: '#ffaa00', richard: '#ff0055', fredbear: '#ffe680' };
+            x.fillStyle = colors[type] || '#ffaa00';
+            x.beginPath(); x.ellipse(256, 256, 190, 225, 0, 0, Math.PI * 2); x.fill();
+            x.fillStyle = '#000';
+            x.beginPath(); x.ellipse(150, 200, 75, 75, 0, 0, Math.PI * 2); x.fill();
+            x.beginPath(); x.ellipse(362, 200, 75, 75, 0, 0, Math.PI * 2); x.fill();
+            const id = x.getImageData(0, 0, 512, 512);
+            for (let i = 0; i < id.data.length; i += 4) { if (id.data[i] > 240 && id.data[i + 1] > 240 && id.data[i + 2] > 240) id.data[i + 3] = 0; }
+            x.putImageData(id, 0, 0);
+            const t = new THREE.CanvasTexture(cvs); t.magFilter = THREE.NearestFilter;
+            return t;
+        }
+
+        function createWallTex() {
+            const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#D1C177'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#BAAB61'; ctx.lineWidth = 2;
+            for (let y = 0; y < 128; y += 16) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(128, y); ctx.stroke(); }
+            const t = new THREE.CanvasTexture(canvas); t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+            return t;
+        }
+
+        function createFloorTex() {
+            const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#7D724D'; ctx.fillRect(0, 0, 128, 128);
+            const t = new THREE.CanvasTexture(canvas); t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+            t.repeat.set(MAP_SIZE / 2, MAP_SIZE / 2);
+            return t;
+        }
+
+        // --- MAP GENERATION ---
+        function buildMap(mapType) {
+            mapMeshes.forEach(m => scene.remove(m));
+            mapMeshes = [];
+
+            if (mapType === 'custom') {
+                MAP_SIZE = 15;
+                mapGrid = customBuilderGrid.map(row => row.slice());
+                // force an outer containment wall regardless of what was painted at the border
+                for (let i = 0; i < MAP_SIZE; i++) {
+                    mapGrid[0][i] = 1; mapGrid[MAP_SIZE - 1][i] = 1;
+                    mapGrid[i][0] = 1; mapGrid[i][MAP_SIZE - 1] = 1;
+                }
+            } else {
+                MAP_SIZE = 120;
+                for (let r = 0; r < MAP_SIZE; r++) { mapGrid[r] = []; for (let c = 0; c < MAP_SIZE; c++) mapGrid[r][c] = 1; }
+                for (let r = 4; r < MAP_SIZE - 4; r++) for (let c = 4; c < MAP_SIZE - 4; c++) if (r % 12 < 9 || c % 12 < 9) mapGrid[r][c] = 0;
+                let cr = Math.floor(MAP_SIZE / 2), cc = Math.floor(MAP_SIZE / 2);
+                for (let r = cr - safeZoneRadius; r <= cr + safeZoneRadius; r++) for (let c = cc - safeZoneRadius; c <= cc + safeZoneRadius; c++) mapGrid[r][c] = 2;
+            }
+
+            const cnf = mapConfig[mapType] || mapConfig['backrooms'];
+            scene.background = new THREE.Color(cnf.sky);
+            ambientLight.color.setHex(cnf.ambient);
+            ambientLight.intensity = 0.8;
+
+            const wG = new THREE.BoxGeometry(CELL_SIZE, 30, CELL_SIZE);
+            const wM = new THREE.MeshLambertMaterial({ map: createWallTex() });
+            let wC = 0;
+            for (let r = 0; r < MAP_SIZE; r++) for (let c = 0; c < MAP_SIZE; c++) if (mapGrid[r][c] === 1) wC++;
+
+            if (wC > 0) {
+                const walls = new THREE.InstancedMesh(wG, wM, wC);
+                let nI = 0; const mat = new THREE.Matrix4();
+                for (let r = 0; r < MAP_SIZE; r++) for (let c = 0; c < MAP_SIZE; c++) {
+                    if (mapGrid[r][c] === 1) { mat.setPosition((c - MAP_SIZE / 2) * CELL_SIZE + CELL_SIZE / 2, 15, (r - MAP_SIZE / 2) * CELL_SIZE + CELL_SIZE / 2); walls.setMatrixAt(nI++, mat); }
+                }
+                scene.add(walls); mapMeshes.push(walls);
+            }
+
+            // decorative parkour platforms (visual only, non-blocking) - custom map only
+            if (mapType === 'custom') {
+                const pG = new THREE.BoxGeometry(CELL_SIZE * 0.6, 3, CELL_SIZE * 0.6);
+                const pM = new THREE.MeshLambertMaterial({ color: 0xaa00ff });
+                for (let r = 0; r < MAP_SIZE; r++) for (let c = 0; c < MAP_SIZE; c++) {
+                    if (mapGrid[r][c] === 3) {
+                        const step = new THREE.Mesh(pG, pM);
+                        step.position.set((c - MAP_SIZE / 2) * CELL_SIZE + CELL_SIZE / 2, 1.5, (r - MAP_SIZE / 2) * CELL_SIZE + CELL_SIZE / 2);
+                        scene.add(step); mapMeshes.push(step);
+                        mapGrid[r][c] = 0; // walkable floor under/around the decorative step
+                    }
+                }
+            }
+
+            const fG = new THREE.PlaneGeometry(MAP_SIZE * CELL_SIZE, MAP_SIZE * CELL_SIZE);
+            const fl = new THREE.Mesh(fG, new THREE.MeshLambertMaterial({ map: createFloorTex() }));
+            fl.rotation.x = -Math.PI / 2;
+            scene.add(fl); mapMeshes.push(fl);
+        }
+
+        // --- MAP BUILDER UI ---
+        const PAINT_COLORS = { 0: '#333', 1: '#888', 2: '#0f0', 3: '#a0f' };
+        function buildBuilderGrid() {
+            const grid = $('builder-grid');
+            grid.innerHTML = '';
+            for (let r = 0; r < 15; r++) {
+                for (let c = 0; c < 15; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'b-cell';
+                    cell.style.background = PAINT_COLORS[customBuilderGrid[r][c]];
+                    cell.dataset.r = r; cell.dataset.c = c;
+                    cell.addEventListener('mousedown', () => { isPaintingMouseDown = true; paintCell(r, c); });
+                    cell.addEventListener('mouseenter', () => { if (isPaintingMouseDown) paintCell(r, c); });
+                    grid.appendChild(cell);
+                }
+            }
+        }
+        function paintCell(r, c) {
+            customBuilderGrid[r][c] = activePaintBrush;
+            const cell = $('builder-grid').children[r * 15 + c];
+            cell.style.background = PAINT_COLORS[activePaintBrush];
+        }
+        window.addEventListener('mouseup', () => isPaintingMouseDown = false);
+
+        // --- CORE GAME ENGINE SETUP ---
+        function initEngine() {
+            scene = new THREE.Scene();
+            particleGeo = new THREE.PlaneGeometry(2.5, 2.5);
+            camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            cameraRig = new THREE.Group();
+            cameraRig.position.set(0, player.height, 0);
+            cameraRig.add(camera);
+            scene.add(cameraRig);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            flashlightLight = new THREE.SpotLight(0xffffff, 2, 250, Math.PI / 4, 0.5, 1);
+            camera.add(flashlightLight);
+            flashlightLight.position.set(0, 0, 1);
+            flashlightLight.target = camera;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            renderer.xr.enabled = true;
+            document.body.appendChild(VRButton.createButton(renderer));
+            $('game-container').appendChild(renderer.domElement);
+
+            const controllerModelFactory = new XRControllerModelFactory();
+            for (let i = 0; i < 2; i++) {
+                const controller = renderer.xr.getController(i);
+                const state = { gripped: false, lastPos: new THREE.Vector3() };
+                gorillaControllers.push(state);
+
+                controller.addEventListener('squeezestart', () => {
+                    state.gripped = true;
+                    controller.getWorldPosition(state.lastPos);
+                });
+                controller.addEventListener('squeezeend', () => { state.gripped = false; });
+                cameraRig.add(controller);
+
+                const grip = renderer.xr.getControllerGrip(i);
+                grip.add(controllerModelFactory.createControllerModel(grip));
+                cameraRig.add(grip);
+
+                if (i === 0) controller1 = controller; else controller2 = controller;
+            }
+
+            buildMap('backrooms');
+            setupControls();
+            buildBuilderGrid();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            renderer.setAnimationLoop(gameLoop);
+        }
+
+        function setActiveInGroup(selector, target) {
+            $$(selector).forEach(b => b.classList.remove('active'));
+            target.classList.add('active');
+        }
+
+        function setupControls() {
+            window.addEventListener('keydown', e => {
+                if (document.activeElement === $('chat-input')) return; // don't hijack WASD while typing chat
+                const k = e.key.toLowerCase();
+                if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
+                if (k === 'shift') keys.shift = true;
+                if (k === ' ') { keys.space = true; e.preventDefault(); tryJump(); }
+                if (k === 'c') { keys.c = true; tryStartSlide(); }
+                if (k === 'f') {
+                    flashlightLight.visible = !flashlightLight.visible;
+                    $('flashlight-indicator').classList.toggle('flashlight-off', !flashlightLight.visible);
+                }
+            });
+            window.addEventListener('keyup', e => {
+                const k = e.key.toLowerCase();
+                if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
+                if (k === 'shift') keys.shift = false; if (k === ' ') keys.space = false; if (k === 'c') keys.c = false;
+            });
+
+            document.body.addEventListener('mousemove', e => {
+                if (document.pointerLockElement === document.body) {
+                    player.yaw -= e.movementX * 0.002;
+                    player.pitch -= e.movementY * 0.002;
+                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+                }
+            });
+
+            $('lock-mouse-btn').onclick = () => { document.body.requestPointerLock(); };
+            $('start-btn').onclick = () => { switchUI('game'); isPlaying = true; resetGame(); initAudio(); document.body.requestPointerLock(); };
+            $('shop-btn').onclick = () => { renderShop(); switchUI('shop'); };
+            $('close-shop-btn').onclick = () => { switchUI('menu'); };
+            $('respawn-btn').onclick = () => { switchUI('game'); isPlaying = true; resetGame(); document.body.requestPointerLock(); };
+            $('menu-btn').onclick = () => { switchUI('menu'); };
+
+            $('username-input').addEventListener('input', e => { myUsername = e.target.value.trim() || myUsername; });
+
+            $$('.mode-btn').forEach(btn => btn.addEventListener('click', () => {
+                setActiveInGroup('.mode-btn', btn);
+                currentMode = btn.dataset.mode;
+            }));
+
+            $$('.pacing-btn').forEach(btn => btn.addEventListener('click', () => {
+                setActiveInGroup('.pacing-btn', btn);
+                nextbotSpeedMult = parseFloat(btn.dataset.pacing);
+            }));
+
+            $$('.map-btn').forEach(btn => btn.addEventListener('click', () => {
+                setActiveInGroup('.map-btn', btn);
+                currentMapStyle = btn.dataset.map;
+                $('map-maker-box').style.display = currentMapStyle === 'custom' ? 'block' : 'none';
+            }));
+
+            $$('.brush-btn').forEach(btn => btn.addEventListener('click', () => {
+                setActiveInGroup('.brush-btn', btn);
+                activePaintBrush = parseInt(btn.dataset.paint);
+            }));
+
+            $('custom-image').addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (file) { customImageUrl = URL.createObjectURL(file); showToast('Custom bot image loaded'); }
+            });
+            $('custom-chase').addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (file) { customChaseAudio = URL.createObjectURL(file); showToast('Custom chase audio loaded'); }
+            });
+            $('custom-map-bgm').addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (file) { customMapBGMUrl = URL.createObjectURL(file); showToast('Custom map BGM loaded'); }
+            });
+        }
+
+        function tryJump() {
+            if (isPlaying && !player.isDead && player.isGrounded && !renderer.xr.isPresenting) {
+                let force = player.jumpForce;
+                if (currentMode === 'moon') force *= 1.6;
+                if (player.bhopWindow > 0) player.bhopMultiplier = Math.min(1.35, player.bhopMultiplier + 0.05);
+                player.velocityY = force;
+                player.isGrounded = false;
+                player.bhopWindow = 0.35;
+            }
+        }
+
+        function tryStartSlide() {
+            if (isPlaying && !player.isDead && player.isGrounded && player.slideCooldown <= 0 && (keys.w || keys.a || keys.s || keys.d) && !renderer.xr.isPresenting) {
+                player.isSliding = true;
+                player.slideTimer = player.slideDuration;
+                player.slideCooldown = 1.4;
+            }
+        }
+
+        // Gorilla Tag style locomotion: no legs, no thumbstick walking. You move by gripping
+        // (squeeze/grip button) and swinging your arms - your hands "grab" the air, and dragging
+        // them backward relative to your body pushes you forward, exactly like the real game.
+        // Letting go lets your momentum carry you, decaying with a bit of drag.
+        const gorillaTmpPos = new THREE.Vector3();
+
+        function handleVRControllers(delta) {
+            if (!renderer.xr.isPresenting) return;
+            if (!gorillaMomentum) gorillaMomentum = new THREE.Vector3();
+
+            let activeSwing = false;
+            const frameDelta = new THREE.Vector3();
+
+            for (let i = 0; i < gorillaControllers.length; i++) {
+                const controller = renderer.xr.getController(i);
+                const state = gorillaControllers[i];
+                if (state.gripped) {
+                    controller.getWorldPosition(gorillaTmpPos);
+                    frameDelta.add(gorillaTmpPos.clone().sub(state.lastPos));
+                    state.lastPos.copy(gorillaTmpPos);
+                    activeSwing = true;
+                }
+            }
+
+            if (activeSwing) {
+                // moving your hand backward relative to your body pushes you forward
+                const move = frameDelta.multiplyScalar(-1.4);
+                const nextX = cameraRig.position.x + move.x;
+                const nextZ = cameraRig.position.z + move.z;
+                if (!isColliding(nextX, cameraRig.position.z)) cameraRig.position.x = nextX; else gorillaMomentum.x = 0;
+                if (!isColliding(cameraRig.position.x, nextZ)) cameraRig.position.z = nextZ; else gorillaMomentum.z = 0;
+                gorillaMomentum.copy(move);
+                distanceTraveled += move.length();
+            } else {
+                const nextX = cameraRig.position.x + gorillaMomentum.x;
+                const nextZ = cameraRig.position.z + gorillaMomentum.z;
+                if (!isColliding(nextX, cameraRig.position.z)) cameraRig.position.x = nextX; else gorillaMomentum.x = 0;
+                if (!isColliding(cameraRig.position.x, nextZ)) cameraRig.position.z = nextZ; else gorillaMomentum.z = 0;
+                gorillaMomentum.multiplyScalar(0.9); // drag / friction on released momentum
+                distanceTraveled += gorillaMomentum.length();
+            }
+
+            const inSafe = getGridVal(cameraRig.position.x, cameraRig.position.z) === 2;
+            $('safe-zone-text').style.opacity = inSafe ? 1 : 0;
+        }
+
+        function getGridVal(x, z) {
+            let c = Math.floor((x + (MAP_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            let r = Math.floor((z + (MAP_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            return (r < 0 || r >= MAP_SIZE || c < 0 || c >= MAP_SIZE) ? 1 : mapGrid[r][c];
+        }
+
+        function isColliding(x, z, r = player.radius) {
+            const pts = [[x - r, z - r], [x + r, z - r], [x - r, z + r], [x + r, z + r]];
+            for (let p of pts) { if (getGridVal(p[0], p[1]) === 1) return true; }
+            return false;
+        }
+
+        function triggerGameOver() {
+            isPlaying = false;
+            player.isDead = true;
+            if (humGain) humGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            $('hud').style.display = 'none';
+
+            const jd = $('jumpscare');
+            jd.style.display = 'block';
+            playSyntheticJumpscare();
+            addChat("System", myUsername + " was caught!", 'death');
+
+            if (document.pointerLockElement) document.exitPointerLock();
+
+            setTimeout(() => {
+                jd.style.display = 'none';
+                switchUI('death');
+                playerCoins += coinsEarnedThisRun;
+                updateCoinDisplay();
+                $('stat-time').innerText = timeSurvived.toFixed(1) + "s";
+                $('stat-dist').innerText = Math.floor(distanceTraveled) + "m";
+                $('stat-coins').innerText = "+" + coinsEarnedThisRun;
+            }, 1200);
+        }
+
+        function spawnExtraBot(kind) {
+            let mesh, speed, scale;
+            if (kind === 'richard') {
+                mesh = create3DRichard(20); speed = 85; scale = 20;
+            } else if (kind === 'fredbear') {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 0.1), new THREE.MeshBasicMaterial({ map: createBotTex('fredbear'), transparent: true }));
+                speed = 130; scale = 16;
+            } else { // munci
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 0.1), new THREE.MeshBasicMaterial({ map: createBotTex('munci'), transparent: true }));
+                speed = 115; scale = 12;
+            }
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 60 + Math.random() * 30;
+            mesh.position.set(Math.cos(angle) * dist, scale * 0.5, Math.sin(angle) * dist);
+            scene.add(mesh);
+            bots.push({ mesh, speed, scale, kind });
+        }
+
+        function triggerLocalEvent(ev, trg) {
+            addChat("Server", `${trg} triggered ${ev}!`, 'event');
+            if (ev === 'event_bloodmoon') {
+                scene.background = new THREE.Color(0x330000);
+                ambientLight.color.setHex(0xff0000);
+                bots.forEach(b => b.speed *= 1.2);
+            } else if (ev === 'event_blackout') {
+                scene.background = new THREE.Color(0x000000);
+                ambientLight.intensity = 0.02;
+            } else if (ev === 'event_munci') {
+                spawnExtraBot('munci');
+            } else if (ev === 'event_richard') {
+                spawnExtraBot('richard');
+            } else if (ev === 'event_fredbear') {
+                spawnExtraBot('fredbear');
+            } else if (ev === 'event_chaos') {
+                scene.background = new THREE.Color(0x330000);
+                ambientLight.color.setHex(0xff0000);
+                ambientLight.intensity = 0.15;
+                spawnExtraBot('munci'); spawnExtraBot('richard'); spawnExtraBot('fredbear');
+            }
+        }
+
+        function resetGame() {
+            buildMap(currentMapStyle);
+            cameraRig.position.set(0, player.height, 0);
+            cameraRig.rotation.y = 0;
+            player.yaw = 0; player.pitch = 0;
+            player.velocityY = 0; player.isGrounded = true; player.isSliding = false;
+            player.slideTimer = 0; player.slideCooldown = 0;
+            player.stamina = player.staminaMax; player.exhausted = false;
+            player.bhopMultiplier = 1.0; player.bhopWindow = 0;
+            player.isDead = false;
+            timeSurvived = 0; distanceTraveled = 0; coinsEarnedThisRun = 0;
+
+            bots.forEach(b => scene.remove(b.mesh));
+            bots = [];
+            trailParticles.forEach(p => scene.remove(p.mesh));
+            trailParticles = [];
+
+            let baseSpeed = 65;
+            if (currentMode === 'nightmare') baseSpeed *= 1.5;
+            if (currentMode === 'chill') baseSpeed *= 0.7;
+            if (currentMode === 'lava') baseSpeed *= 1.25;
+            baseSpeed *= nextbotSpeedMult;
+
+            let m;
+            if (customImageUrl) {
+                const tex = new THREE.TextureLoader().load(customImageUrl);
+                m = new THREE.Mesh(new THREE.BoxGeometry(14, 14, 0.1), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+            } else {
+                m = new THREE.Mesh(new THREE.BoxGeometry(14, 14, 0.1), new THREE.MeshBasicMaterial({ map: createBotTex('munci'), transparent: true }));
+            }
+            m.position.set(50, 7, 50);
+            scene.add(m);
+            bots.push({ mesh: m, speed: baseSpeed, scale: 14, kind: 'default' });
+        }
+
+        function applyModeMovementEffects() {
+            ambientLight.intensity = mapConfig[currentMapStyle] ? 0.8 : 0.8;
+        }
+
+        function updatePlayer(delta) {
+            if (!renderer.xr.isPresenting) {
+                camera.quaternion.setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
+
+                // stamina / sprint
+                const wantsSprint = keys.shift && (keys.w || keys.a || keys.s || keys.d) && !player.exhausted;
+                player.isSprinting = wantsSprint;
+                if (wantsSprint) {
+                    player.stamina = Math.max(0, player.stamina - player.staminaDrain * delta);
+                    if (player.stamina <= 0) player.exhausted = true;
+                } else {
+                    player.stamina = Math.min(player.staminaMax, player.stamina + player.staminaRecover * delta);
+                    if (player.exhausted && player.stamina > player.staminaMax * 0.25) player.exhausted = false;
+                }
+                const bar = $('stamina-bar');
+                bar.style.width = (player.stamina / player.staminaMax * 100) + '%';
+                bar.classList.toggle('exhausted', player.exhausted);
+
+                // slide timers
+                if (player.slideCooldown > 0) player.slideCooldown -= delta;
+                if (player.isSliding) {
+                    player.slideTimer -= delta;
+                    if (player.slideTimer <= 0) player.isSliding = false;
+                }
+                if (player.bhopWindow > 0) player.bhopWindow -= delta; else player.bhopMultiplier = Math.max(1.0, player.bhopMultiplier - delta * 0.5);
+
+                // gravity / jump
+                player.velocityY -= player.gravity * (currentMode === 'moon' ? 0.5 : 1) * delta;
+                cameraRig.position.y += player.velocityY * delta;
+                if (cameraRig.position.y <= player.height) {
+                    cameraRig.position.y = player.height;
+                    player.velocityY = 0;
+                    player.isGrounded = true;
+                } else {
+                    player.isGrounded = false;
+                }
+
+                let currentSpeed = player.isSliding ? player.speedSlide : (player.isSprinting ? player.speedSprint : player.speedWalk);
+                currentSpeed *= player.bhopMultiplier;
+                currentSpeed *= (trailSpeedBonus[equippedTrail] || 1);
+                if (currentMode === 'lava') currentSpeed *= 1.1;
+
+                let dirX = 0, dirZ = 0;
+                if (keys.w) dirZ -= 1; if (keys.s) dirZ += 1; if (keys.a) dirX -= 1; if (keys.d) dirX += 1;
+
+                if (dirX !== 0 || dirZ !== 0) {
+                    const len = Math.sqrt(dirX * dirX + dirZ * dirZ); dirX /= len; dirZ /= len;
+                    const moveVec = new THREE.Vector3(dirX, 0, dirZ).applyEuler(new THREE.Euler(0, player.yaw, 0));
+
+                    let nextX = cameraRig.position.x + moveVec.x * currentSpeed * delta;
+                    if (!isColliding(nextX, cameraRig.position.z)) cameraRig.position.x = nextX;
+
+                    let nextZ = cameraRig.position.z + moveVec.z * currentSpeed * delta;
+                    if (!isColliding(cameraRig.position.x, nextZ)) cameraRig.position.z = nextZ;
+
+                    distanceTraveled += currentSpeed * delta;
+
+                    trailSpawnTimer -= delta;
+                    if (trailSpawnTimer <= 0) { spawnTrailParticle(); trailSpawnTimer = 0.08; }
+                }
+
+                // safe zone indicator
+                const inSafe = getGridVal(cameraRig.position.x, cameraRig.position.z) === 2;
+                $('safe-zone-text').style.opacity = inSafe ? 1 : 0;
+            } else {
+                handleVRControllers(delta);
+            }
+        }
+
+        function updateBots(delta) {
+            const inSafe = getGridVal(cameraRig.position.x, cameraRig.position.z) === 2;
+            for (let bot of bots) {
+                let dir = new THREE.Vector3().subVectors(cameraRig.position, bot.mesh.position);
+                dir.y = 0;
+                let dist = dir.length();
+                if (dist > 1.0) {
+                    dir.normalize();
+                    bot.mesh.position.addScaledVector(dir, bot.speed * delta);
+                    bot.mesh.lookAt(cameraRig.position.x, bot.mesh.position.y, cameraRig.position.z);
+                }
+                if (dist < 8.0 && isPlaying && !player.isDead && !inSafe) {
+                    triggerGameOver();
+                    break;
+                }
+            }
+        }
+
+        function gameLoop(time) {
+            let delta = (time - lastTime) / 1000;
+            if (isNaN(delta) || delta > 0.1) delta = 0.016;
+            lastTime = time;
+
+            if (isPlaying && !player.isDead) {
+                timeSurvived += delta;
+                let coinRate = 2;
+                if (currentMode === 'rush') coinRate *= 2;
+                coinsEarnedThisRun = Math.floor(timeSurvived * coinRate);
+                $('hud-timer').innerText = timeSurvived.toFixed(1);
+                $('hud-coins').innerText = coinsEarnedThisRun;
+
+                updatePlayer(delta);
+                updateBots(delta);
+                updateTrailParticles(delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => {
+            initEngine();
+            setupChat();
+            updateCoinDisplay();
+            applyCosmetics();
+        };
+    </script>
+</body>
+</html>
